@@ -11,22 +11,20 @@ A software-based QPSK communication receiver with carrier and timing synchroniza
 ## System Flow
 ```mermaid
 flowchart LR
-    subgraph Row1 [ ]
-        direction LR
-        A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Synchronization Errors]
-    end
+    %% TOP ROW (Flows naturally Left to Right)
+    A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Sync Errors]
 
-    subgraph Row2 [ ]
-        direction RL
-        F[Matched Filter] --> G[Timing Recovery] --> H[Carrier Recovery] --> I[QPSK Demodulator] --> J[Recovered Bits] --> K[BER & Constellation Analysis]
-    end
-
-    %% Drop from the end of the top row to the start of the bottom row
+    %% BOTTOM ROW (Drawn using reverse arrows to simulate Right to Left flow)
+    K[BER & Analysis] <-- J[Recovered Bits] <-- I[Demodulator] <-- H[Recovery Blocks] <-- F[Matched Filter]
+    
+    %% INVISIBLE VERTICAL LINKS (Forces the grid alignment)
+    A ~~~ K
+    B ~~~ J
+    C ~~~ I
+    D ~~~ H
+    
+    %% The actual drop-down connection
     E --> F
-
-    %% Hide the subgraph borders to create the seamless snake effect
-    style Row1 fill:none,stroke:none,color:none
-    style Row2 fill:none,stroke:none,color:none
 
 ```
 
