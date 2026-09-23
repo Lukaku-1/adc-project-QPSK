@@ -10,7 +10,7 @@ A software-based QPSK communication receiver with carrier and timing synchroniza
 
 ## System Flow
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Row1 [ ]
         direction LR
         A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Synchronization Errors]
