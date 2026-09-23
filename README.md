@@ -19,11 +19,15 @@ A --> B
 B --> C
 C --> D
 D --> E
-E --> F
-F --> H
-H --> I
-I --> J
-J --> K
+
+%% Force the arrow out the East side of E and into the East side of F
+E:e --> F:e
+
+%% Reverse the arrows on the bottom row to point left
+F <-- H
+H <-- I
+I <-- J
+J <-- K
 ```
 
 ## Authors
