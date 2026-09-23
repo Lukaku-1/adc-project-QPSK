@@ -11,7 +11,13 @@ A software-based QPSK communication receiver with carrier and timing synchroniza
 ## System Flow
 ```mermaid
 flowchart LR
-A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Synchronization Errors] --> F[Matched Filter] --> G[Timing Recovery] --> H[Carrier Recovery] --> I[QPSK Demodulator] --> J[Recovered Bits] --> K[BER & Constellation Analysis]
+  A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Synchronization Errors]
+
+end
+E[Synchronization Errors] --> F[Matched Filter]
+
+flowchart RL
+  F[Matched Filter] --> G[Timing Recovery] --> H[Carrier Recovery] --> I[QPSK Demodulator] --> J[Recovered Bits] --> K[BER & Constellation Analysis]
 
 
 ```
