@@ -11,18 +11,18 @@ A software-based QPSK communication receiver with carrier and timing synchroniza
 ## System Flow
 ```mermaid
 flowchart TB
-    subgraph Transmitter [Transmitter & Channel]
+    subgraph Row1 [Transmitter & Channel]
         direction LR
         A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Synchronization Errors]
     end
 
-    subgraph Receiver [Receiver & Analysis]
-        direction LR
+    subgraph Row2 [Receiver & Analysis]
+        direction RL
         F[Matched Filter] --> G[Timing Recovery] --> H[Carrier Recovery] --> I[QPSK Demodulator] --> J[Recovered Bits] --> K[BER & Constellation Analysis]
     end
 
+    %% Connect the end of the top row (E) to the start of the bottom row (F)
     E --> F
-
 
 ```
 
