@@ -28,9 +28,7 @@ J --> K
 
 ## Authors
 
-Akul S Mohan 
-Samil R
-Sandeep Santhosh K
+Akul S Mohan &nbsp;&nbsp; Samil R &nbsp;&nbsp; Sandeep Santhosh K
 
 
 ## License
