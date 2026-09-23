@@ -10,24 +10,21 @@ A software-based QPSK communication receiver with carrier and timing synchroniza
 
 ## System Flow
 ```mermaid
-flowchart LR
-    %% TOP ROW (Flows naturally Left to Right)
-    A[Random Bits] --> B[QPSK Modulator] --> C[RRC Pulse Shaping] --> D[Noisy Channel] --> E[Sync Errors]
+block-beta
+columns 5
+A["Random Bits"] B["QPSK Mod"] C["RRC Pulse"] D["Channel"] E["Sync Error"]
+K["BER Analysis"] J["Demod"] I["Carrier"] H["Timing"] F["Matched Filter"]
 
-    %% BOTTOM ROW (Drawn using reverse arrows to simulate Right to Left flow)
-    K[BER & Analysis] <-- J[Recovered Bits] <-- I[Demodulator] <-- H[Recovery Blocks] <-- F[Matched Filter]
-    
-    %% INVISIBLE VERTICAL LINKS (Forces the grid alignment)
-    A ~~~ K
-    B ~~~ J
-    C ~~~ I
-    D ~~~ H
-    
-    %% The actual drop-down connection
-    E --> F
-
+A --> B
+B --> C
+C --> D
+D --> E
+E --> F
+F --> H
+H --> I
+I --> J
+J --> K
 ```
-
 
 ## Authors
 
