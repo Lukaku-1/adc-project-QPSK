@@ -1,4 +1,4 @@
-# Carrier and Timing Recovery for QPSK Communication
+# Carrier and Timing Recovery for Different Digital Modulation schemes (to be updated)
 
 ## Description
 
