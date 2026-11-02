@@ -1,179 +1,174 @@
-clc;
-clear;
-close all;
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import upfirdn
 
-%% PARAMETERS
-N = 2000;              % Number of bits
-SPS = 8;               % Samples per symbol
-SNR = 10;              % Noise level
-rolloff = 0.4;         % RRC roll-off
+# PARAMETERS
+N = 2000               # Number of bits
+SPS = 8                # Samples per symbol
+SNR = 10               # Noise level in dB
+rolloff = 0.4          # RRC roll-off
 
-%% 1. GENERATE RANDOM BITS
-txBits = randi([0 1],N,1);
+# 1. GENERATE RANDOM BITS
+np.random.seed(42)     # Set seed for reproducibility
+txBits = np.random.randint(0, 2, N)
 
-%% 2. QPSK MODULATION
-% Group bits into pairs
-bits = reshape(txBits,2,[]).';
+# 2. QPSK MODULATION
+bits = txBits.reshape(-1, 2)
+txSymbols = np.zeros(len(bits), dtype=complex)
 
-% QPSK mapping
-% 00 ->  1+j
-% 01 -> -1+j
-% 11 -> -1-j
-% 10 ->  1-j
+for k in range(len(bits)):
+    b = bits[k]
+    if np.array_equal(b, [0, 0]):
+        txSymbols[k] = 1 + 1j
+    elif np.array_equal(b, [0, 1]):
+        txSymbols[k] = -1 + 1j
+    elif np.array_equal(b, [1, 1]):
+        txSymbols[k] = -1 - 1j
+    else:
+        txSymbols[k] = 1 - 1j
 
-txSymbols = zeros(size(bits,1),1);
+txSymbols = txSymbols / np.sqrt(2)
 
-for k = 1:size(bits,1)
+# Helper function to generate Root Raised Cosine filter
+def rcosdesign(beta, span, sps):
+    num_taps = span * sps + 1
+    t = np.arange(-num_taps // 2 + 1, num_taps // 2 + 1) / sps
+    h = np.zeros_like(t, dtype=float)
+    for i, ti in enumerate(t):
+        if ti == 0:
+            h[i] = 1.0 - beta + (4 * beta / np.pi)
+        elif np.isclose(abs(ti), 1.0 / (4 * beta)):
+            h[i] = (beta / np.sqrt(2)) * ((1 + 2/np.pi) * np.sin(np.pi / (4 * beta)) + (1 - 2/np.pi) * np.cos(np.pi / (4 * beta)))
+        else:
+            numerator = np.sin(np.pi * ti * (1 - beta)) + 4 * beta * ti * np.cos(np.pi * ti * (1 + beta))
+            denominator = np.pi * ti * (1 - (4 * beta * ti)**2)
+            h[i] = numerator / denominator
+    h = h / np.sqrt(sps)
+    return h
 
-    if isequal(bits(k,:),[0 0])
-        txSymbols(k) = 1 + 1j;
+rrc = rcosdesign(rolloff, 6, SPS)
 
-    elseif isequal(bits(k,:),[0 1])
-        txSymbols(k) = -1 + 1j;
+# 3. RRC PULSE SHAPING
+txSignal = upfirdn(rrc, txSymbols, up=SPS, down=1)
 
-    elseif isequal(bits(k,:),[1 1])
-        txSymbols(k) = -1 - 1j;
+# 4. ADD FREQUENCY AND PHASE ERROR
+n = np.arange(len(txSignal))
+freqError = 0.02
+phaseError = 20 * np.pi / 180
 
-    else
-        txSymbols(k) = 1 - 1j;
-    end
+rxSignal = txSignal * np.exp(1j * (2 * np.pi * freqError * n / SPS + phaseError))
 
-end
+# 5. ADD NOISE
+sigPower = np.mean(np.abs(rxSignal)**2)
+noisePower = sigPower / (10**(SNR / 10))
+noise = np.sqrt(noisePower / 2) * (np.random.randn(len(rxSignal)) + 1j * np.random.randn(len(rxSignal)))
+rxSignal = rxSignal + noise
 
-txSymbols = txSymbols/sqrt(2);
+# 6. MATCHED FILTER
+rxFiltered = upfirdn(rrc, rxSignal, up=1, down=1)
 
-%% 3. RRC PULSE SHAPING
-rrc = rcosdesign(rolloff,6,SPS,'sqrt');
+# 7. TIMING RECOVERY (Manual Downsampling)
+filterDelay = 6 * SPS
+timingSignal = rxFiltered[filterDelay::SPS]
 
-txSignal = upfirdn(txSymbols,rrc,SPS,1);
+# 8. CARRIER RECOVERY (Custom QPSK Costas Loop)
+rxSymbols_recovered = np.zeros(len(timingSignal), dtype=complex)
+phase_est = 0.0
+freq_est = 0.0
 
-%% 4. ADD FREQUENCY AND PHASE ERROR
-n = (0:length(txSignal)-1).';
+alpha = 0.13      # Proportional gain
+beta_gain = 0.005 # Integral (frequency) gain
 
-freqError = 0.02;
-phaseError = 20*pi/180;
+for k in range(len(timingSignal)):
+    # 1. Apply current phase correction
+    rxSymbols_recovered[k] = timingSignal[k] * np.exp(-1j * phase_est)
 
-rxSignal = txSignal .* ...
-    exp(1j*(2*pi*freqError*n/SPS + phaseError));
+    # 2. Phase Error Detector for QPSK
+    I = np.real(rxSymbols_recovered[k])
+    Q = np.imag(rxSymbols_recovered[k])
+    phase_error = (np.sign(I) * Q) - (np.sign(Q) * I)
 
-%% 5. ADD NOISE
-% Calculate measured signal power
-sigPower = mean(abs(rxSignal).^2); 
+    # 3. Update Loop Filter
+    freq_est = freq_est + (beta_gain * phase_error)
+    phase_est = phase_est + (alpha * phase_error) + freq_est
 
-% Calculate required noise power based on SNR (in dB)
-noisePower = sigPower / (10^(SNR/10)); 
+# 9. QPSK DEMODULATION
+rxBits = np.zeros(2 * len(rxSymbols_recovered), dtype=int)
 
-% Generate complex Gaussian noise
-noise = sqrt(noisePower/2) * (randn(size(rxSignal)) + 1j * randn(size(rxSignal)));
+for k in range(len(rxSymbols_recovered)):
+    b1 = 0 if np.real(rxSymbols_recovered[k]) >= 0 else 1
+    b2 = 0 if np.imag(rxSymbols_recovered[k]) >= 0 else 1
 
-% Add noise to the received signal
-rxSignal = rxSignal + noise;
+    if b1 == 0 and b2 == 0:
+        rxBits[2*k:2*k+2] = [0, 0]
+    elif b1 == 1 and b2 == 0:
+        rxBits[2*k:2*k+2] = [0, 1]
+    elif b1 == 1 and b2 == 1:
+        rxBits[2*k:2*k+2] = [1, 1]
+    else:
+        rxBits[2*k:2*k+2] = [1, 0]
 
-%% 6. MATCHED FILTER
-rxFiltered = upfirdn(rxSignal,rrc,1,1);
+# 10. BER
+L = min(len(txBits), len(rxBits))
+errors = np.sum(txBits[:L] != rxBits[:L])
+BER = errors / L
 
-%% 7. TIMING RECOVERY (Manual Downsampling)
+print(f"Number of errors = {errors}")
+print(f"BER = {BER:.6f}")
 
-filterDelay = 6 * SPS;
-timingSignal = rxFiltered(filterDelay + 1 : SPS : end);
+# 11. PLOTS (5 Subplots in a 2x3 Grid)
+plt.figure(figsize=(15, 10))
 
-%% 8. CARRIER RECOVERY (Custom QPSK Costas Loop)
-rxSymbols = zeros(length(timingSignal), 1);
-phase_est = 0;
-freq_est = 0;
+# 1. Original Plot
+plt.subplot(2, 3, 1)
+plt.plot(np.real(txSymbols), np.imag(txSymbols), '.')
+plt.grid(True)
+plt.axis('equal')
+plt.title('1. Original (Transmitted QPSK)')
+plt.xlabel('I')
+plt.ylabel('Q')
 
-% Loop filter parameters (similar to LoopBandwidth = 0.05)
-alpha = 0.13;    % Proportional gain
-beta  = 0.005;   % Integral (frequency) gain
+# 2. Noise Plot (Received Signal with impairments & noise)
+plt.subplot(2, 3, 2)
+plt.plot(np.real(rxSignal), np.imag(rxSignal), '.')
+plt.grid(True)
+plt.title('2. Noise & Impairments (Received)')
+plt.xlabel('I')
+plt.ylabel('Q')
 
-for k = 1:length(timingSignal)
-    % 1. Apply the current phase correction
-    rxSymbols(k) = timingSignal(k) * exp(-1j * phase_est);
+# 3. Timing Recovery Plot
+plt.subplot(2, 3, 3)
+plt.plot(np.real(timingSignal), np.imag(timingSignal), '.')
+plt.grid(True)
+plt.axis('equal')
+plt.title('3. Timing Recovery')
+plt.xlabel('I')
+plt.ylabel('Q')
 
-    % 2. Phase Error Detector for QPSK
-    I = real(rxSymbols(k));
-    Q = imag(rxSymbols(k));
-    % The error metric pulls the symbol towards the nearest diagonal (QPSK constellation)
-    phase_error = (sign(I) * Q) - (sign(Q) * I); 
+# 4. Carrier Recovery Plot (Phase/Freq correction view)
+plt.subplot(2, 3, 4)
+plt.plot(np.real(rxSymbols_recovered), np.imag(rxSymbols_recovered), '.')
+plt.grid(True)
+plt.axis('equal')
+plt.title('4. Carrier Recovery')
+plt.xlabel('I')
+plt.ylabel('Q')
 
-    % 3. Update the Loop Filter
-    freq_est = freq_est + (beta * phase_error);
-    phase_est = phase_est + (alpha * phase_error) + freq_est;
-end
-%% 9. QPSK DEMODULATION
-rxBits = zeros(2*length(rxSymbols),1);
+# 5. Comparison: Timing Recovery ONLY (spinning) vs Both Recoveries (locked)
+plt.subplot(2, 3, 5)
+plt.plot(np.real(timingSignal), np.imag(timingSignal), 'b.', alpha=0.3, label='Timing Only')
+plt.plot(np.real(rxSymbols_recovered), np.imag(rxSymbols_recovered), 'r.', label='Both Recovered')
+plt.grid(True)
+plt.axis('equal')
+plt.title('5. Timing vs Both Recoveries')
+plt.xlabel('I')
+plt.ylabel('Q')
+plt.legend()
 
-for k = 1:length(rxSymbols)
+# Hide the 6th empty subplot slot if desired, or leave clean
+plt.subplot(2, 3, 6)
+plt.axis('off')
+plt.text(0.1, 0.5, 'Simulation Completed\nBER: {:.6f}'.format(BER), fontsize=12, fontweight='bold')
 
-    if real(rxSymbols(k)) >= 0
-        b1 = 0;
-    else
-        b1 = 1;
-    end
-
-    if imag(rxSymbols(k)) >= 0
-        b2 = 0;
-    else
-        b2 = 1;
-    end
-
-    % Mapping correction
-    if b1==0 && b2==0
-        rxBits(2*k-1:2*k) = [0;0];
-
-    elseif b1==1 && b2==0
-        rxBits(2*k-1:2*k) = [0;1];
-
-    elseif b1==1 && b2==1
-        rxBits(2*k-1:2*k) = [1;1];
-
-    else
-        rxBits(2*k-1:2*k) = [1;0];
-    end
-
-end
-
-%% 10. BER
-L = min(length(txBits),length(rxBits));
-
-errors = sum(txBits(1:L) ~= rxBits(1:L));
-
-BER = errors/L;
-
-fprintf('Number of errors = %d\n',errors);
-fprintf('BER = %f\n',BER);
-
-%% 11. PLOTS
-
-figure;
-
-subplot(2,2,1);
-plot(real(txSymbols),imag(txSymbols),'.');
-grid on;
-axis equal;
-title('Transmitted QPSK');
-xlabel('I');
-ylabel('Q');
-
-subplot(2,2,2);
-plot(real(rxSignal),imag(rxSignal),'.');
-grid on;
-title('Received Signal');
-xlabel('I');
-ylabel('Q');
-
-subplot(2,2,3);
-plot(real(timingSignal),imag(timingSignal),'.');
-grid on;
-axis equal;
-title('After Timing Recovery');
-xlabel('I');
-ylabel('Q');
-
-subplot(2,2,4);
-plot(real(rxSymbols),imag(rxSymbols),'.');
-grid on;
-axis equal;
-title('After Carrier Recovery');
-xlabel('I');
-ylabel('Q');
+plt.tight_layout()
+plt.show()
